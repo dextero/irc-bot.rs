@@ -75,7 +75,8 @@ fn test_panic_catching(_: HandlerContext, _: &Yaml) -> BotCmdResult {
 }
 
 fn test_stack_overflow(_: HandlerContext, _: &Yaml) -> Reaction {
-    let huge = [[[1usize; 1024]; 1024]; 1024];
+    //let huge = [[[1usize; 1024]; 1024]; 1024];
+    let huge = [[[1usize; 1024]; 1]; 1];
     Reaction::Msg(
         format!(
         "Wow, I allocated {byte_len} bytes on the stack! I have more stack space than I thought.",
