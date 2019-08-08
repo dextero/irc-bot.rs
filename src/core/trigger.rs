@@ -33,6 +33,8 @@ pub struct Trigger {
     pub help_msg: Cow<'static, str>,
 
     pub uuid: Uuid,
+
+    pub always_watching: bool,
 }
 
 pub(super) struct TemporaryTrigger {
@@ -40,7 +42,7 @@ pub(super) struct TemporaryTrigger {
     pub(super) activation_limit: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TriggerAttr {
     /// Use this attribute for triggers that should trigger even on messages that aren't addressed
     /// to the bot.
@@ -84,6 +86,56 @@ impl Trigger {
             .into()
         })
     }
+}
+
+/// Returns `None` if no trigger matched.
+pub(super) fn run_any_matching_unaddressed(
+    state: &State,
+    text: &str,
+    msg_metadata: &MsgMetadata,
+) -> Result<Option<BotCmdResult>> {
+    let mut trigger = None;
+
+    for (_priority, triggers) in state.triggers.iter().rev() {
+        if triggers.is_empty() {
+            continue;
+        }
+
+        if let Some(t) = triggers
+            .rand_iter()
+            .with_rng(state.rng()?.deref_mut())
+            .filter(|t| t.always_watching)
+            .filter(|t| t.read_regex().map(|rx| rx.is_match(text)).unwrap_or(false))
+            .next()
+        {
+            trigger = Some(t);
+            break;
+        }
+    }
+
+    let trigger = match trigger {
+        Some(t) => t,
+        None => return Ok(None),
+    };
+
+    let ctx = HandlerContext {
+        state,
+        this_feature: ModuleFeatureRef::Trigger(trigger),
+        request_origin: msg_metadata.dest,
+        invoker: msg_metadata.prefix,
+        __nonexhaustive: (),
+    };
+
+    let args = trigger.read_regex()?.captures(text).expect(
+        "We shouldn't have reached this point if the \
+         trigger didn't match!",
+    );
+
+    Ok(Some(util::run_handler(
+        "trigger",
+        trigger.name.clone(),
+        || trigger.handler.run(ctx, args),
+    )?))
 }
 
 /// Returns `None` if no trigger matched.

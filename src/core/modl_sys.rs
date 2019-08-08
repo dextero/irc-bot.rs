@@ -140,12 +140,6 @@ impl ModuleBuilder {
         S2: Into<Cow<'static, str>>,
         Attrs: IntoIterator<Item = &'attr TriggerAttr>,
     {
-        for attr in attrs {
-            match attr {
-                &TriggerAttr::AlwaysWatching => unimplemented!(),
-            }
-        }
-
         let trigger = ModuleFeature::Trigger {
             name: name.into(),
             regex: Arc::new(RwLock::new(regex_str.into_regex_ci().expect(
@@ -156,6 +150,7 @@ impl ModuleBuilder {
             handler: handler.into(),
             priority,
             uuid: Uuid::new_v4(),
+            always_watching: attrs.into_iter().any(|a| a == &TriggerAttr::AlwaysWatching),
         };
 
         self.features.push(trigger);
@@ -231,6 +226,8 @@ enum ModuleFeature {
         priority: TriggerPriority,
 
         uuid: Uuid,
+
+        always_watching: bool,
     },
 }
 
@@ -456,6 +453,7 @@ impl State {
                 ref help_msg,
                 priority,
                 uuid,
+                always_watching,
             } => {
                 self.triggers
                     .entry(priority)
@@ -468,6 +466,7 @@ impl State {
                         priority,
                         help_msg: help_msg.clone(),
                         uuid,
+                        always_watching,
                     });
             }
         };

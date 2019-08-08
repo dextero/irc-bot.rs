@@ -229,6 +229,44 @@ fn handle_reaction(
     }
 }
 
+fn handle_bot_unaddressed_trigger(
+    state: &Arc<State>,
+    server_id: ServerId,
+    prefix: OwningMsgPrefix,
+    target: String,
+    msg: String,
+    bot_nick: String,
+) -> Option<LibReaction<Message>> {
+    let reaction = (|| {
+        let metadata = MsgMetadata {
+            prefix: prefix.parse(),
+            dest: MsgDest {
+                server_id,
+                target: &target,
+            },
+        };
+
+        if let Some(r) = trigger::run_any_matching_unaddressed(state, &msg, &metadata)? {
+            Ok(bot_command_reaction("<trigger>", r))
+        } else {
+            Ok(Reaction::None)
+        }
+    })();
+
+    match reaction
+        .and_then(|reaction| handle_reaction(state, server_id, prefix, &target, reaction, bot_nick))
+    {
+        Ok(r) => r,
+        Err(e) => Some(LibReaction::RawMsg(
+            aatxe::Command::PRIVMSG(
+                target,
+                format!("Encountered error while trying to handle message: {}", e),
+            )
+            .into(),
+        )),
+    }
+}
+
 fn handle_bot_command_or_trigger(
     state: &Arc<State>,
     server_id: ServerId,
@@ -378,7 +416,23 @@ fn handle_privmsg(
     let bot_nick = state.nick(server_id)?;
 
     if !is_msg_to_nick(&target, &msg, &bot_nick) {
-        return Ok(());
+        // This could take a while or panic, so do it in a new thread.
+
+        // These are cheap to clone, supposedly.
+        let state = state.clone();
+        let outbox = outbox.clone();
+
+        let thread_spawn_result = thread::Builder::new().spawn(move || {
+            let lib_reaction =
+                handle_bot_unaddressed_trigger(&state, server_id, prefix, target, msg, bot_nick);
+
+            push_to_outbox(&outbox, server_id, lib_reaction);
+        });
+
+        return match thread_spawn_result {
+            Ok(thread::JoinHandle { .. }) => Ok(()),
+            Err(e) => Err(ErrorKind::ThreadSpawnFailure(e).into()),
+        };
     }
 
     if prefix.parse().nick == Some(&target) && msg.trim() == UPDATE_MSG_PREFIX_STR {
