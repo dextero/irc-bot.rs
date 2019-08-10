@@ -1,3 +1,7 @@
+use self::irc_send::OutboxPort;
+use super::irc_send;
+use super::irc_send::push_to_outbox;
+use super::reaction::LibReaction;
 use super::trigger::TriggerPriority;
 use super::BotCmdAttr;
 use super::BotCmdAuthLvl;
@@ -8,10 +12,12 @@ use super::ErrorKind;
 use super::GetDebugInfo;
 use super::ModuleLoadHandler;
 use super::Result;
+use super::ServerId;
 use super::State;
 use super::Trigger;
 use super::TriggerAttr;
 use super::TriggerHandler;
+use irc::proto::Message;
 use itertools;
 use regex::Regex;
 use smallvec::SmallVec;
@@ -22,6 +28,22 @@ use std::sync::RwLock;
 use util;
 use uuid::Uuid;
 use yaml_rust::Yaml;
+
+pub struct MessageSink {
+    pub(super) sender: OutboxPort,
+    pub(super) server_ids: Vec<ServerId>,
+}
+
+impl MessageSink {
+    pub fn send_message<M>(&self, msg: M)
+    where
+        M: Into<LibReaction<Message>> + Clone,
+    {
+        for id in &self.server_ids {
+            push_to_outbox(&self.sender, *id, Some(msg.clone().into()))
+        }
+    }
+}
 
 #[derive(CustomDebug)]
 pub struct Module {
@@ -34,6 +56,8 @@ pub struct Module {
 
     #[debug(skip)]
     on_load: SmallVec<[Box<ModuleLoadHandler>; 1]>,
+
+    pub threads: Vec<Box<fn(MessageSink)>>,
 }
 
 impl PartialEq for Module {
@@ -63,6 +87,7 @@ pub struct ModuleBuilder {
     name: Cow<'static, str>,
     features: Vec<ModuleFeature>,
     on_load: SmallVec<[Box<ModuleLoadHandler>; 1]>,
+    threads: Vec<Box<fn(MessageSink)>>,
 }
 
 pub fn mk_module<'modl, S>(name: S) -> ModuleBuilder
@@ -73,6 +98,7 @@ where
         name: name.into(),
         features: Default::default(),
         on_load: Default::default(),
+        threads: Default::default(),
     }
 }
 
@@ -158,6 +184,11 @@ impl ModuleBuilder {
         self
     }
 
+    pub fn thread(mut self, f: Box<fn(MessageSink)>) -> Self {
+        self.threads.push(f);
+        self
+    }
+
     /// Sets a handler function for loading or reloading the module's configuration.
     ///
     /// The given `handler` function will be called when the module is first loaded, as well as if
@@ -177,16 +208,19 @@ impl ModuleBuilder {
             name,
             mut features,
             mut on_load,
+            mut threads,
         } = self;
 
         features.shrink_to_fit();
         on_load.shrink_to_fit();
+        threads.shrink_to_fit();
 
         Module {
             name: name,
             uuid: Uuid::new_v4(),
             features: features,
             on_load,
+            threads,
         }
     }
 }

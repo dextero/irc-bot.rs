@@ -21,6 +21,7 @@ use self::irc_msgs::OwningMsgPrefix;
 use self::irc_send::push_to_outbox;
 use self::misc_traits::GetDebugInfo;
 pub use self::modl_sys::mk_module;
+use self::modl_sys::MessageSink;
 pub use self::modl_sys::Module;
 use self::modl_sys::ModuleFeatureInfo;
 use self::modl_sys::ModuleInfo;
@@ -395,6 +396,24 @@ pub fn run<Cfg, ModlData, ErrF, ModlCtor, Modls>(
 
             Ok(())
         });
+    }
+
+    for (_id, module) in &state.modules {
+        for thread_func in &module.threads {
+            let func = thread_func.clone();
+            let sender = outbox_sender.clone();
+            let server_ids: Vec<ServerId> = state.servers.iter().map(|(id, _)| *id).collect();
+            spawn_thread(
+                &state,
+                "*".into(),
+                "custom",
+                |_| "custom thread".into(),
+                move |_| {
+                    func(MessageSink { sender, server_ids });
+                    Ok(())
+                },
+            );
+        }
     }
 
     match aatxe_reactor.run() {
