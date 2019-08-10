@@ -59,7 +59,7 @@ where
     let mut y = Buffer::from(y.as_bytes());
 
     fn finish_irc_lowercasing(s: &mut Buffer) {
-        for mut c in s {
+        for c in s {
             *c = match c {
                 b'[' => b'{',
                 b']' => b'}',
