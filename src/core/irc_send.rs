@@ -63,6 +63,8 @@ pub(super) fn send_main(
             None => continue,
         };
 
+        trace!("outbox_receiver: {:?}", output);
+
         let aatxe_clients = match state.aatxe_clients.read() {
             Ok(map) => map,
             Err(_) => {
@@ -86,6 +88,7 @@ pub(super) fn send_main(
             }
         };
 
+        trace!("outbox_receiver: send_reaction {:?}", output);
         send_reaction(&state, &aatxe_client, thread_label, output)
     }
 
