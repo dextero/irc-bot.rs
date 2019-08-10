@@ -35,6 +35,7 @@ pub use self::trigger::TriggerPriority;
 use crossbeam_channel;
 use irc::client::prelude as aatxe;
 use irc::client::prelude::ClientExt as AatxeClientExt;
+use irc::client::Client;
 use irc::proto::Message;
 use rand::EntropyRng;
 use rand::SeedableRng;
@@ -402,14 +403,21 @@ pub fn run<Cfg, ModlData, ErrF, ModlCtor, Modls>(
         for thread_func in &module.threads {
             let func = thread_func.clone();
             let sender = outbox_sender.clone();
-            let server_ids: Vec<ServerId> = state.servers.iter().map(|(id, _)| *id).collect();
+            // TODO: unwraps
+            let channels: BTreeMap<ServerId, Vec<String>> = state
+                .aatxe_clients
+                .read()
+                .unwrap()
+                .iter()
+                .map(|(id, client)| (*id, client.list_channels().unwrap()))
+                .collect();
             spawn_thread(
                 &state,
                 "*".into(),
                 "custom",
                 |_| "custom thread".into(),
                 move |_| {
-                    func(MessageSink { sender, server_ids });
+                    func(MessageSink { sender, channels });
                     Ok(())
                 },
             );

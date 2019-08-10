@@ -18,8 +18,8 @@ pub(super) type OutboxPort = crossbeam_channel::Sender<OutboxRecord>;
 
 #[derive(Debug)]
 pub(super) struct OutboxRecord {
-    server_id: ServerId,
-    output: LibReaction<Message>,
+    pub(super) server_id: ServerId,
+    pub(super) output: LibReaction<Message>,
 }
 
 pub(super) fn push_to_outbox<O>(outbox_sender: &OutboxPort, server_id: ServerId, output: O)

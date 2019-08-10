@@ -1,6 +1,6 @@
 use self::irc_send::OutboxPort;
 use super::irc_send;
-use super::irc_send::push_to_outbox;
+use super::irc_send::OutboxRecord;
 use super::reaction::LibReaction;
 use super::trigger::TriggerPriority;
 use super::BotCmdAttr;
@@ -17,12 +17,13 @@ use super::State;
 use super::Trigger;
 use super::TriggerAttr;
 use super::TriggerHandler;
-use irc::proto::Message;
+use irc::client::prelude as aatxe;
 use itertools;
 use regex::Regex;
 use smallvec::SmallVec;
 use std;
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::RwLock;
 use util;
@@ -31,16 +32,29 @@ use yaml_rust::Yaml;
 
 pub struct MessageSink {
     pub(super) sender: OutboxPort,
-    pub(super) server_ids: Vec<ServerId>,
+    pub(super) channels: BTreeMap<ServerId, Vec<String>>,
 }
 
 impl MessageSink {
-    pub fn send_message<M>(&self, msg: M)
-    where
-        M: Into<LibReaction<Message>> + Clone,
-    {
-        for id in &self.server_ids {
-            push_to_outbox(&self.sender, *id, Some(msg.clone().into()))
+    pub fn send_message(&self, msg: String) {
+        for (server_id, channel_names) in &self.channels {
+            for chan in channel_names {
+                match self.sender.try_send(OutboxRecord {
+                    server_id: server_id.clone(),
+                    output: LibReaction::RawMsg(
+                        aatxe::Command::PRIVMSG(chan.clone(), msg.clone()).into(),
+                    ),
+                }) {
+                    Ok(()) => {}
+                    Err(crossbeam_channel::TrySendError::Full(record)) => {
+                        error!("Outbox full!!! Could not send {record:?}", record = record)
+                    }
+                    Err(crossbeam_channel::TrySendError::Disconnected(record)) => error!(
+                        "Outbox receiver disconnected!!! Could not send {record:?}",
+                        record = record
+                    ),
+                }
+            }
         }
     }
 }
