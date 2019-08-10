@@ -18,6 +18,7 @@ use super::Trigger;
 use super::TriggerAttr;
 use super::TriggerHandler;
 use irc::client::prelude as aatxe;
+use irc::client::Client;
 use itertools;
 use regex::Regex;
 use smallvec::SmallVec;
@@ -32,12 +33,21 @@ use yaml_rust::Yaml;
 
 pub struct MessageSink {
     pub(super) sender: OutboxPort,
-    pub(super) channels: BTreeMap<ServerId, Vec<String>>,
+    pub(super) state: Arc<State>,
 }
 
 impl MessageSink {
     pub fn send_message(&self, msg: String) {
-        for (server_id, channel_names) in &self.channels {
+        // TODO: unwraps
+        let channels: BTreeMap<ServerId, Vec<String>> = self
+            .state
+            .aatxe_clients
+            .read()
+            .unwrap()
+            .iter()
+            .map(|(id, client)| (*id, client.list_channels().unwrap()))
+            .collect();
+        for (server_id, channel_names) in channels {
             for chan in channel_names {
                 match self.sender.try_send(OutboxRecord {
                     server_id: server_id.clone(),
