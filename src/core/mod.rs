@@ -21,7 +21,7 @@ use self::irc_msgs::OwningMsgPrefix;
 use self::irc_send::push_to_outbox;
 use self::misc_traits::GetDebugInfo;
 pub use self::modl_sys::mk_module;
-use self::modl_sys::MessageSink;
+pub use self::modl_sys::MessageSink;
 pub use self::modl_sys::Module;
 use self::modl_sys::ModuleFeatureInfo;
 use self::modl_sys::ModuleInfo;
