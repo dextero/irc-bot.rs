@@ -395,6 +395,19 @@ pub(super) fn handle_msg(
             push_to_outbox(outbox, server_id, handle_004(state, server_id)?);
             Ok(())
         }
+        Message {
+            command: aatxe::Command::KICK(chan, nick, _),
+            ..
+        } => {
+            if nick == state.nick(server_id)? {
+                push_to_outbox(
+                    outbox,
+                    server_id,
+                    LibReaction::RawMsg(aatxe::Command::JOIN(chan, None, None).into()),
+                );
+            }
+            Ok(())
+        }
         _ => Ok(()),
     }
 }
