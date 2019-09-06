@@ -375,6 +375,8 @@ pub(super) fn handle_msg(
         input_msg.to_string().trim_end_matches("\r\n")
     );
 
+    trace!("{:?}", input_msg);
+
     match input_msg {
         Message {
             command: aatxe::Command::PRIVMSG(target, msg),
