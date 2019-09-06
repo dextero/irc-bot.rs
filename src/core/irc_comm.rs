@@ -435,9 +435,9 @@ pub(super) fn handle_msg(
                         outbox,
                         server_id,
                         LibReaction::RawMsg(
-                            aatxe::Command::PRIVMSG(
-                                "chanserv".to_owned(),
-                                format!("op {} {}", nick, chan),
+                            aatxe::Command::UserMODE(
+                                chan,
+                                vec![aatxe::Mode::plus(aatxe::UserMode::Oper, Some(&nick))],
                             )
                             .into(),
                         ),
