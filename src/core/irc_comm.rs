@@ -408,6 +408,37 @@ pub(super) fn handle_msg(
             }
             Ok(())
         }
+        Message {
+            command: aatxe::Command::JOIN(chan, _, Some(nick)),
+            ..
+        } => {
+            debug!("JOIN {} {:?}", chan, nick);
+            if state
+                .config
+                .admins
+                .iter()
+                .find(|a| match &a.nick {
+                    Some(n) => n == &nick,
+                    None => false,
+                })
+                .is_some()
+            {
+                debug!("granting op to {} on {}", nick, chan);
+                push_to_outbox(
+                    outbox,
+                    server_id,
+                    LibReaction::RawMsg(
+                        aatxe::Command::PRIVMSG(
+                            "chanserv".to_owned(),
+                            format!("op {} {}", nick, chan),
+                        )
+                        .into(),
+                    ),
+                );
+            }
+
+            Ok(())
+        }
         _ => Ok(()),
     }
 }
