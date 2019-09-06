@@ -19,6 +19,7 @@ use super::State;
 use irc::client::prelude as aatxe;
 use irc::proto::Message;
 use itertools::Itertools;
+use regex::Regex;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
 use std::borrow::Cow;
@@ -411,32 +412,37 @@ pub(super) fn handle_msg(
             Ok(())
         }
         Message {
-            command: aatxe::Command::JOIN(chan, _, Some(nick)),
+            command: aatxe::Command::JOIN(chan, None, None),
+            prefix: Some(prefix),
             ..
         } => {
-            debug!("JOIN {} {:?}", chan, nick);
-            if state
-                .config
-                .admins
-                .iter()
-                .find(|a| match &a.nick {
-                    Some(n) => n == &nick,
-                    None => false,
-                })
-                .is_some()
+            if let Some(nick) = Regex::new("^(.*)!(.*)@(.*)")
+                .unwrap()
+                .captures(&prefix)
+                .and_then(|cap| Some(cap.get(1).unwrap().as_str()))
             {
-                debug!("granting op to {} on {}", nick, chan);
-                push_to_outbox(
-                    outbox,
-                    server_id,
-                    LibReaction::RawMsg(
-                        aatxe::Command::PRIVMSG(
-                            "chanserv".to_owned(),
-                            format!("op {} {}", nick, chan),
-                        )
-                        .into(),
-                    ),
-                );
+                debug!("JOIN {} {:?}", chan, nick);
+                if let Some(nick) = state
+                    .config
+                    .admins
+                    .iter()
+                    .filter(|a| a.nick.is_some())
+                    .map(|a| a.nick.clone().unwrap())
+                    .find(|n| n == nick)
+                {
+                    debug!("granting op to {} on {}", nick, chan);
+                    push_to_outbox(
+                        outbox,
+                        server_id,
+                        LibReaction::RawMsg(
+                            aatxe::Command::PRIVMSG(
+                                "chanserv".to_owned(),
+                                format!("op {} {}", nick, chan),
+                            )
+                            .into(),
+                        ),
+                    );
+                }
             }
 
             Ok(())
